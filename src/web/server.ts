@@ -202,6 +202,7 @@ import {
   pruneIdleLlamaSwapLogTails,
   tryWebviewRefererFallback,
 } from './routes/index.js';
+import { registerForkDeleteSessionRoutes } from '../fork/delete-session-routes.js';
 import { isLostWebviewFrameNavigation } from './webview-proxy.js';
 import { CronService } from '../cron/cron-service.js';
 
@@ -1123,6 +1124,7 @@ export class WebServer extends EventEmitter {
     registerSearchRoutes(this.app, ctx);
     registerMeRoutes(this.app, ctx);
     registerAdminRoutes(this.app, ctx);
+    registerForkDeleteSessionRoutes(this.app, ctx);
     registerOrchestratorRoutes(this.app, ctx);
     registerWebviewRoutes(this.app, ctx, this.basePath);
     registerTabLayoutRoutes(this.app, ctx);

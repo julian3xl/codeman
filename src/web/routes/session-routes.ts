@@ -176,6 +176,7 @@ import {
   selectLastAnsweredTurn,
 } from '../response-viewer-transcript.js';
 import { readDeepSeekLastResponse } from '../../deepseek-transcript.js';
+import { applyForkSessionFilters } from '../../fork/unified-inputs.js';
 
 // Path to linked-cases registry (same file used by case-routes resolveCasePath)
 const LINKED_CASES_FILE = dataPath('linked-cases.json');
@@ -4899,7 +4900,7 @@ export function registerSessionRoutes(
       // Mux stats are optional.
     }
 
-    return { live, persisted, lifecycle, history, mux };
+    return applyForkSessionFilters({ live, persisted, lifecycle, history, mux });
   }
 
   /**
