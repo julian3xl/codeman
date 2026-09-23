@@ -75,3 +75,9 @@
     padding-left: calc(clamp(250px, 25vw, 430px) + 2rem);
   }
 }
+
+/* ── Session row menu: destructive "Delete session" (fork.js) ────────────── */
+
+.session-row-menu-item.fork-row-menu-delete {
+  color: var(--danger);
+}
