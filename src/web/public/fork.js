@@ -106,3 +106,19 @@ Object.assign(CodemanApp.prototype, {
     }
   },
 });
+
+// ── Case picker: no phantom "testcase" ─────────────────────────────────────
+// Upstream's picker (session-ui.js buildCasePickerOptions) always appends a
+// bare { name: 'testcase' } when the server did not list one, so a deleted
+// testcase keeps showing up. Drop that synthetic entry; a real testcase (one the
+// server lists, which carries a path) stays.
+
+const forkUpstreamBuildCasePickerOptions = CodemanApp.prototype.buildCasePickerOptions;
+
+Object.assign(CodemanApp.prototype, {
+  buildCasePickerOptions(cases = []) {
+    return forkUpstreamBuildCasePickerOptions
+      .call(this, cases)
+      .filter((option) => !(option.name === 'testcase' && !option.case?.path));
+  },
+});
