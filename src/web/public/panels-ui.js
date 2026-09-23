@@ -663,6 +663,9 @@ Object.assign(CodemanApp.prototype, {
         // string, sizeBytes, firstPrompt).
         const record = {
           sessionId: s.sessionId,
+          // The row title (_historyRowLabel) reads name and title first, same as the home list.
+          name: s.name,
+          title: s.title,
           workingDir: s.workingDir || '',
           sizeBytes: s.sizeBytes ?? 0,
           lastModified: new Date(s.lastActivityAt ?? s.createdAt ?? Date.now()).toISOString(),

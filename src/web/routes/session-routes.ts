@@ -124,6 +124,7 @@ import { generateClaudeMd } from '../../templates/claude-md.js';
 import { imageWatcher } from '../../image-watcher.js';
 import { convertHeicToJpeg } from '../heic-jpeg-converter.js';
 import { getLifecycleLog } from '../../session-lifecycle-log.js';
+import { isGeneratedSessionName } from '../../session-auto-name.js';
 import {
   mergeUnifiedSessions,
   filterAndPaginate,
@@ -4268,6 +4269,45 @@ export function registerSessionRoutes(
   }
 
   /**
+   * The conversation's own title from a transcript chunk: the newest
+   * `custom-title` (set by `/rename`, or by `claude --name`, which Codeman passes
+   * at launch), else the newest `ai-title` (Claude Code's generated title).
+   * A custom-title that is only Codeman's `w<n>-<case>` placeholder (what
+   * `--name` carries unless the session was renamed) says less than the
+   * generated title, so it is skipped. Claude Code re-appends both records as the
+   * conversation grows, so the newest copy sits near the END of the file
+   * (measured on real transcripts: always within the last ~26KB): scan the tail.
+   * Capped like the prompts.
+   */
+  function extractTranscriptTitle(text: string): string | undefined {
+    const MAX_TITLE_LEN = 120;
+    let custom: string | undefined;
+    let ai: string | undefined;
+    let start = 0;
+    while (start < text.length) {
+      const end = text.indexOf('\n', start);
+      const line = end === -1 ? text.slice(start) : text.slice(start, end);
+      start = end === -1 ? text.length : end + 1;
+      if (!line.includes('"type":"custom-title"') && !line.includes('"type":"ai-title"')) continue;
+      try {
+        const rec = JSON.parse(line) as { type?: unknown; customTitle?: unknown; aiTitle?: unknown };
+        // Last one wins in both cases: the newest title is the current one.
+        if (rec.type === 'custom-title' && typeof rec.customTitle === 'string' && rec.customTitle.trim()) {
+          const value = rec.customTitle.trim();
+          custom = isGeneratedSessionName(value) ? undefined : value;
+        } else if (rec.type === 'ai-title' && typeof rec.aiTitle === 'string' && rec.aiTitle.trim()) {
+          ai = rec.aiTitle.trim();
+        }
+      } catch {
+        // Malformed/truncated line — skip
+      }
+    }
+    const title = custom ?? ai;
+    if (!title) return undefined;
+    return title.length > MAX_TITLE_LEN ? title.slice(0, MAX_TITLE_LEN) + '\u2026' : title;
+  }
+
+  /**
    * Extract the text of the LAST user message from a JSONL transcript chunk
    * (COD-145). Mirrors `extractFirstUserPrompt` exactly — same user-message
    * detection, same noise/secret/slash-command filters, same 120-char cap — but
@@ -4518,6 +4558,8 @@ export function registerSessionRoutes(
     lastModified: string;
     firstPrompt?: string;
     lastPrompt?: string;
+    /** The conversation's own title (custom-title, else ai-title); see extractTranscriptTitle. */
+    title?: string;
     /** True when workingDir came from the transcript rather than decodeProjectKey's guess. */
     workingDirExact?: boolean;
     gitBranch?: string;
@@ -4562,12 +4604,15 @@ export function registerSessionRoutes(
       // resolves the restart-bookkeeping case (the reason 128KB exists at all)
       // without ever touching the tail-read fallback below for most of that 28%.
       let head = await readFileHead(filePath, smallHeadBuf);
+      // How much of the file `head` can hold: a file no bigger than this was read whole.
+      let headLimit = smallHeadBuf.length;
       let foundContent = head ? hasConversation(head) : false;
       let firstPrompt = head ? extractFirstUserPrompt(head) : undefined;
       if ((!foundContent || !firstPrompt) && head !== null && fileStat.size > smallHeadBuf.length) {
         const biggerHead = await readFileHead(filePath, headBuf);
         if (biggerHead) {
           head = biggerHead;
+          headLimit = headBuf.length;
           if (!foundContent) foundContent = hasConversation(head);
           if (!firstPrompt) firstPrompt = extractFirstUserPrompt(head);
         }
@@ -4597,15 +4642,18 @@ export function registerSessionRoutes(
       }
 
       // COD-145: last (most recent) user prompt lives near the END of the file, so
-      // prefer the tail. For large files where no tail was read yet, read one
-      // (mirrors the firstPrompt > headBuf.length block). Small files fit in `head`,
-      // which then contains the whole transcript — scan it for the last match instead.
-      if (!tail && fileStat.size > headBuf.length) {
+      // prefer the tail, and so does the conversation title. Read one whenever
+      // `head` did not cover the whole file: a file between the two head tiers that
+      // was read only through smallHeadBuf is NOT whole in `head`, and scanning that
+      // partial head returned an old prompt as the "last" one and missed the title.
+      if (!tail && fileStat.size > headLimit) {
         const tailBuf = Buffer.alloc(32768);
         tail = await readFileTail(filePath, tailBuf, fileStat.size);
       }
       const lastPrompt =
         (tail ? extractLastUserPrompt(tail) : undefined) ?? (head ? extractLastUserPrompt(head) : undefined);
+      const title =
+        (tail ? extractTranscriptTitle(tail) : undefined) ?? (head ? extractTranscriptTitle(head) : undefined);
 
       // Automated/SDK-driven invocations (CI review bots, etc.) write transcripts
       // into the same ~/.claude/projects tree as interactive sessions but were
@@ -4654,6 +4702,7 @@ export function registerSessionRoutes(
         lastModified: fileStat.mtime.toISOString(),
         firstPrompt,
         lastPrompt,
+        title,
         gitBranch: git.gitBranch,
         worktreeName: git.worktreeName,
         worktreeRepo: git.worktreeRepo,
@@ -4804,10 +4853,14 @@ export function registerSessionRoutes(
             lastModified: h.lastModified,
             firstPrompt: h.firstPrompt,
             lastPrompt: h.lastPrompt,
+            title: h.title,
             projectKey: h.projectKey,
             gitBranch: h.gitBranch,
             worktreeName: h.worktreeName,
             worktreeRepo: h.worktreeRepo,
+            // Everything in ~/.claude/projects was written by Claude Code, so a
+            // row launched outside Codeman gets its mode badge too.
+            mode: 'claude',
           });
         }
       }

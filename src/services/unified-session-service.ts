@@ -34,6 +34,8 @@ export type UnifiedSessionItem = {
   firstPrompt?: string;
   /** Most recent user prompt from the transcript (COD-145), parallel to firstPrompt. */
   lastPrompt?: string;
+  /** The conversation's own title from its transcript (Claude's custom-title, else ai-title). */
+  title?: string;
   sizeBytes?: number;
   projectKey?: string;
   /** Git branch recorded in the transcript (#266). */
@@ -104,15 +106,17 @@ export type HistoryInput = {
   firstPrompt?: string;
   /** Most recent user prompt from the transcript (COD-145). */
   lastPrompt?: string;
+  /** The conversation's own title (Claude's custom-title, else ai-title). */
+  title?: string;
   projectKey?: string;
   gitBranch?: string;
   worktreeName?: string;
   worktreeRepo?: string;
   /**
-   * Set only by a non-claude transcript source (currently omp and codex); the
-   * Claude scanner never stamps this; the meaningfulness floor below still
-   * counts a row with a `mode` as real, since that also signals "not claude" —
-   * see where it's read below for the isReal check this touches.
+   * The CLI that wrote the transcript: every scanner stamps its own ('claude',
+   * 'omp', 'codex'), so a conversation started outside Codeman still gets its
+   * mode badge. The persisted and live views still override it; the lifecycle
+   * view only fills a mode nothing set before it.
    */
   mode?: string;
   /**
@@ -196,13 +200,13 @@ export function mergeUnifiedSessions(sources: UnifiedSources): UnifiedSessionIte
     overwrite(item, 'sizeBytes', h.sizeBytes);
     overwrite(item, 'firstPrompt', h.firstPrompt);
     overwrite(item, 'lastPrompt', h.lastPrompt);
+    overwrite(item, 'title', h.title);
     overwrite(item, 'projectKey', h.projectKey);
     overwrite(item, 'gitBranch', h.gitBranch);
     overwrite(item, 'worktreeName', h.worktreeName);
     overwrite(item, 'worktreeRepo', h.worktreeRepo);
-    // Claude rows never set this (they're implicitly claude); a non-claude
-    // transcript source (currently only omp) does, so a history-only row
-    // still gets a mode badge instead of reading as claude by default.
+    // Every transcript scanner stamps its CLI, so a history-only row gets a
+    // mode badge too; the persisted/live views below override it.
     overwrite(item, 'mode', h.mode);
     overwrite(item, 'resumeId', h.resumeId);
     const ms = Date.parse(h.lastModified);
@@ -388,7 +392,16 @@ export function filterAndPaginate(
   const q = (opts.q ?? '').trim().toLowerCase();
   const filtered = q
     ? items.filter((it) => {
-        const hay = [it.name, it.firstPrompt, it.lastPrompt, it.workingDir, it.sessionId, it.worktreeName, it.gitBranch]
+        const hay = [
+          it.name,
+          it.title,
+          it.firstPrompt,
+          it.lastPrompt,
+          it.workingDir,
+          it.sessionId,
+          it.worktreeName,
+          it.gitBranch,
+        ]
           .filter((v): v is string => typeof v === 'string')
           .join(' ')
           .toLowerCase();

@@ -1842,6 +1842,74 @@ describe('session-routes', () => {
       expect(ids).toContain(sessionId);
     });
 
+    it('titles a row from the transcript: newest custom-title, else newest ai-title, read from the tail', async () => {
+      // Claude Code keeps re-appending both title records, so the current one is
+      // the NEWEST and sits near the end of the file. These transcripts are bigger
+      // than the 16KB head tier but under the 128KB one, the size range where the
+      // scanner used to read only the partial head and never looked at the tail.
+      const home = process.env.HOME as string;
+      const projPath = join(home, '.claude', 'projects', 'proj-title-test');
+      await mkdir(projPath, { recursive: true });
+
+      const rec = (o: object) => JSON.stringify(o) + '\n';
+      const user = (text: string) => rec({ type: 'user', message: { role: 'user', content: text } });
+      const filler = rec({
+        type: 'assistant',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'x'.repeat(1000) }] },
+      }).repeat(40);
+
+      const customId = 'c1c1c1c1-c1c1-c1c1-c1c1-c1c1c1c1c1c1';
+      await writeFile(
+        join(projPath, `${customId}.jsonl`),
+        user('first question') +
+          rec({ type: 'custom-title', customTitle: 'w1-old', sessionId: customId }) +
+          rec({ type: 'ai-title', aiTitle: 'Generated title', sessionId: customId }) +
+          filler +
+          rec({ type: 'custom-title', customTitle: 'Renamed by hand', sessionId: customId }) +
+          rec({ type: 'ai-title', aiTitle: 'Newer generated title', sessionId: customId })
+      );
+
+      const aiId = 'a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1';
+      await writeFile(
+        join(projPath, `${aiId}.jsonl`),
+        user('another question') +
+          rec({ type: 'ai-title', aiTitle: 'Old generated title', sessionId: aiId }) +
+          filler +
+          user('the latest question') +
+          rec({ type: 'ai-title', aiTitle: 'Current generated title', sessionId: aiId })
+      );
+
+      // `claude --name` usually carries Codeman's w<n>-<case> placeholder: the
+      // generated title says more, so a placeholder custom-title is skipped.
+      const placeholderId = 'd3d3d3d3-d3d3-d3d3-d3d3-d3d3d3d3d3d3';
+      await writeFile(
+        join(projPath, `${placeholderId}.jsonl`),
+        user('a third question') +
+          filler +
+          rec({ type: 'custom-title', customTitle: 'w1-proj', sessionId: placeholderId }) +
+          rec({ type: 'ai-title', aiTitle: 'Descriptive title', sessionId: placeholderId })
+      );
+
+      const plainId = 'b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2';
+      const plain = user('no title here');
+      await writeFile(join(projPath, `${plainId}.jsonl`), plain + '#'.repeat(4200 - plain.length));
+
+      const res = await harness.app.inject({ method: 'GET', url: '/api/history/sessions?projectKey=proj-title-test' });
+      expect(res.statusCode).toBe(200);
+      const rows = JSON.parse(res.body).data.sessions as Array<{
+        sessionId: string;
+        title?: string;
+        lastPrompt?: string;
+      }>;
+      const byId = new Map(rows.map((r) => [r.sessionId, r]));
+      expect(byId.get(customId)?.title).toBe('Renamed by hand');
+      expect(byId.get(aiId)?.title).toBe('Current generated title');
+      // Same tail read: the last prompt is the real last one, not the last one inside the 16KB head.
+      expect(byId.get(aiId)?.lastPrompt).toBe('the latest question');
+      expect(byId.get(placeholderId)?.title).toBe('Descriptive title');
+      expect(byId.get(plainId)?.title).toBeUndefined();
+    });
+
     it('finds the real first prompt past a large run of pre-message bookkeeping lines', async () => {
       // A session restarted many times over a long conversation accumulates a batch
       // of small bookkeeping lines (mode/permission-mode/last-prompt/queue-operation)

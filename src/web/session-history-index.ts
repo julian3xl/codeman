@@ -32,6 +32,8 @@
  * - setHistoryIndexRefresher / ensureHistorySessionIndexFresh: the refresh hook.
  */
 
+import { isGeneratedSessionName } from '../session-auto-name.js';
+
 /** One past-session row in the snapshot. Mirrors what the search corpus needs, nothing more. */
 export interface HistorySessionIndexItem {
   /** Codeman session id (the search result's session id and dedupe key). */
@@ -74,6 +76,8 @@ let refreshInFlight = false;
 export interface MergedSessionLike {
   sessionId: string;
   name?: string;
+  /** The conversation's own title (transcript custom-title / ai-title). */
+  title?: string;
   workingDir?: string;
   claudeSessionId?: string;
   createdAt?: number;
@@ -99,7 +103,10 @@ export function buildHistorySessionIndexItems(
   const items: HistorySessionIndexItem[] = [];
   for (const m of merged) {
     if (items.length >= HISTORY_INDEX_MAX_ITEMS) break;
-    const name = m.name ?? '';
+    // Same precedence as the history row title (_historyRowLabel): a real name,
+    // then the conversation's own title, then a bare `w<n>-<case>` placeholder.
+    const realName = m.name && !isGeneratedSessionName(m.name) ? m.name : '';
+    const name = realName || m.title || m.name || '';
     const workingDir = m.workingDir ?? '';
     if (!name && !workingDir) continue;
     items.push({
