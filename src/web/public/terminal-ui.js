@@ -2893,7 +2893,12 @@ Object.assign(CodemanApp.prototype, {
    * would silently do nothing for exactly the rows the list is mostly made of.
    */
   _historyRowLabel(s, fallback) {
-    return s.name || s.firstPrompt || fallback || '';
+    // A name the user (or auto-naming) gave, then the conversation's own title
+    // (Claude's custom-title / ai-title from the transcript), then its first
+    // prompt. A bare `w<n>-<case>` placeholder (isGeneratedSessionName in
+    // session-auto-name.ts) says less than any of those, so it comes last.
+    const placeholder = !!s.name && /^[ws]\d+-[a-zA-Z0-9_-]+$/.test(s.name);
+    return (placeholder ? '' : s.name) || s.title || s.firstPrompt || s.name || fallback || '';
   },
 
   /**

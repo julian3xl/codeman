@@ -49,6 +49,27 @@ describe('buildHistorySessionIndexItems', () => {
     expect(items[1]).toMatchObject({ owner: undefined, live: false, timestamp: 200, claudeSessionId: 'uuid-b' });
   });
 
+  it("labels a transcript-only row with the conversation's own title", () => {
+    const items = buildHistorySessionIndexItems(
+      [{ sessionId: 't', name: '', title: 'Conversation title', workingDir: '/home/u/t' }],
+      new Map(),
+      new Set()
+    );
+    expect(items[0].name).toBe('Conversation title');
+  });
+
+  it('puts a bare w<n>-<case> placeholder behind the title, and keeps it when there is nothing else', () => {
+    const items = buildHistorySessionIndexItems(
+      [
+        { sessionId: 'p', name: 'w1-mister', title: 'Generated title', workingDir: '/home/u/m' },
+        { sessionId: 'q', name: 'w2-mister', workingDir: '/home/u/m' },
+      ],
+      new Map(),
+      new Set()
+    );
+    expect(items.map((i) => i.name)).toEqual(['Generated title', 'w2-mister']);
+  });
+
   it('drops rows with neither a name nor a working directory', () => {
     const items = buildHistorySessionIndexItems([{ sessionId: 'empty' }, ...merged], new Map(), new Set());
     expect(items.some((i) => i.sessionId === 'empty')).toBe(false);

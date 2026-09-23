@@ -289,3 +289,21 @@ describe('issue #260: sort', () => {
     }
   });
 });
+
+describe('row title precedence', () => {
+  const label = (s: Record<string, unknown>) => proto._historyRowLabel(s, '~/folder');
+
+  it("prefers a real name, then the conversation's own title, then the first prompt", () => {
+    expect(label({ name: 'My name', title: 'Title', firstPrompt: 'prompt' })).toBe('My name');
+    expect(label({ name: 'w3-app: renamed', title: 'Title' })).toBe('w3-app: renamed');
+    expect(label({ title: 'Title', firstPrompt: 'prompt' })).toBe('Title');
+    expect(label({ firstPrompt: 'prompt' })).toBe('prompt');
+    expect(label({})).toBe('~/folder');
+  });
+
+  it('puts a bare w<n>-<case> placeholder behind the title and the prompt', () => {
+    expect(label({ name: 'w1-mister', title: 'Generated title', firstPrompt: 'prompt' })).toBe('Generated title');
+    expect(label({ name: 'w1-mister', firstPrompt: 'prompt' })).toBe('prompt');
+    expect(label({ name: 's2-app' })).toBe('s2-app');
+  });
+});

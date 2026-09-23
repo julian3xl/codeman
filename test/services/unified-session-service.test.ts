@@ -14,6 +14,34 @@ import {
 } from '../../src/services/unified-session-service.js';
 
 describe('mergeUnifiedSessions', () => {
+  it('carries the transcript title and mode, and a Codeman view still overrides the mode', () => {
+    const merged = mergeUnifiedSessions({
+      history: [
+        {
+          sessionId: 'conv-1',
+          workingDir: '/w',
+          sizeBytes: 4000,
+          lastModified: '2026-09-02T00:00:00.000Z',
+          firstPrompt: 'first',
+          title: 'Conversation title',
+          mode: 'claude',
+        },
+        {
+          sessionId: 'sess-2',
+          workingDir: '/w',
+          sizeBytes: 4000,
+          lastModified: '2026-09-01T00:00:00.000Z',
+          mode: 'claude',
+        },
+      ],
+      persisted: [{ id: 'sess-2', mode: 'shell', name: 'w2-w' }],
+    });
+    const byId = new Map(merged.map((m) => [m.sessionId, m]));
+    expect(byId.get('conv-1')).toMatchObject({ title: 'Conversation title', mode: 'claude' });
+    expect(byId.get('sess-2')?.mode).toBe('shell');
+    expect(filterAndPaginate(merged, { q: 'conversation TITLE' }).sessions.map((s) => s.sessionId)).toEqual(['conv-1']);
+  });
+
   // A codex conversation showing twice is worse than cosmetic: the stale PAST row
   // still resumes, so clicking it starts a SECOND `codex resume` on a thread
   // already open in another pane. Both folds below are what prevent that.
