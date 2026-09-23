@@ -1,0 +1,77 @@
+/**
+ * @fileoverview Fork-only style overrides (julian3xl/codeman).
+ *
+ * Loaded LAST from index.html, after styles.css and mobile.css, so at equal
+ * specificity these rules win on source order alone. Everything this fork
+ * changes visually lives here instead of in the upstream stylesheets, which
+ * keeps rebases onto Ark0N/Codeman down to the single <link> line in
+ * index.html.
+ *
+ * ⚠️ mobile.css is only applied below 1024px (media attribute on its <link>);
+ * this file has none, so phone-only rules need their own @media block here.
+ */
+
+/* ── Home screen: full-width welcome content ─────────────────────────────── */
+
+/* Upstream caps the column at 520px (styles.css) and at 100vw - 1.5rem on
+   phones (mobile.css). Take the whole overlay width on every device; the
+   column's own padding is the only horizontal margin left. */
+.welcome-content {
+  width: 100%;
+  max-width: none;
+  /* Full height too: upstream only BOUNDS the column (max-height: 100%) and the
+     overlay centers it. The overlay is absolutely inset, so 100% resolves. */
+  height: 100%;
+}
+
+/* The Resume/search block had its own 560px cap inside the column, and now
+   also takes every pixel of height the column has left (it already carries
+   `min-height: 0`, so it still gives ground on a short window). */
+.history-sessions {
+  max-width: none;
+  flex-grow: 1;
+}
+
+/* The list is what actually fills that height: upstream caps it at
+   min(42vh, 360px) collapsed and min(64vh, 660px) expanded. How many rows it
+   shows collapsed stays JS-driven (_HISTORY_INITIAL_COUNT); only the box grows,
+   and it still scrolls internally past the bottom. */
+.history-list,
+.history-list.expanded {
+  flex-grow: 1;
+  max-height: none;
+}
+
+/* Hide the hero (title + tagline) and the Run/Tunnel button row; the toolbar's
+   Run button stays the way to start a session. The `.welcome-content >` prefix
+   outranks upstream's bare class rules (e.g. `.welcome-actions { display: flex }`)
+   on specificity, so this holds regardless of what mobile.css sets. */
+.welcome-content > .welcome-title,
+.welcome-content > .welcome-desc,
+.welcome-content > .welcome-actions,
+.welcome-content > .welcome-hint,
+.welcome-content > .welcome-ralph-link {
+  display: none;
+}
+
+/* ── Phone overview home screen (mobile-overview.js, <600px) ─────────────── */
+
+/* Hide its header: the brand name plus the split Run button and its mode menu
+   (built by _buildMobileOverviewTop()). The toolbar's Run button still starts a
+   session. The ancestor prefix outranks mobile.css's bare
+   `.mobile-overview-header { display: flex }`. */
+.mobile-overview .mobile-overview-header {
+  display: none;
+}
+
+/* The desktop home rail (.home-sessions, home-sessions.js) is absolutely
+   positioned over the overlay's left edge, so full-width content has to step
+   past it. Same gates as the rail itself: >=1180px, rendered (not [hidden]),
+   and not the vertical tab orientation, which hides it. The width mirrors
+   `.home-sessions { width: clamp(250px, 25vw, 430px) }` in styles.css; keep
+   the two in sync. */
+@media (min-width: 1180px) {
+  html:not([data-tab-orientation='vertical']) .welcome-overlay:has(> .home-sessions:not([hidden])) .welcome-content {
+    padding-left: calc(clamp(250px, 25vw, 430px) + 2rem);
+  }
+}
